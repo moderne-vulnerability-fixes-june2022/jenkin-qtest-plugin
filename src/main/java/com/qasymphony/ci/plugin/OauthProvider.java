@@ -2,6 +2,8 @@ package com.qasymphony.ci.plugin;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.qasymphony.ci.plugin.exception.OAuthException;
+import com.qasymphony.ci.plugin.model.qtest.TokenExpiration;
+import com.qasymphony.ci.plugin.model.qtest.TokenStatus;
 import com.qasymphony.ci.plugin.utils.HttpClientUtils;
 import com.qasymphony.ci.plugin.utils.JsonUtils;
 import com.qasymphony.ci.plugin.utils.ResponseEntity;
@@ -18,12 +20,33 @@ import java.util.logging.Logger;
  */
 public class OauthProvider {
   private static final Logger LOG = Logger.getLogger(OauthProvider.class.getName());
-  public static String HEADER_KEY = "Basic amVua2luczpkZEtzVjA4NmNRbW8wWjZNUzBCaU4wekpidVdLbk5oNA==";
+  private static final String HEADER_KEY = "Basic amVua2luczpkZEtzVjA4NmNRbW8wWjZNUzBCaU4wekpidVdLbk5oNA==";
 
+  private static final Map<String, Map<String, TokenExpiration>> QTEST_TOKEN_EXPIRATION_HOLDER = new HashMap<>();
   private OauthProvider() {
 
   }
 
+  public static void putOrUpdateTokenExpiration(String qTestUrl, String apiKey, String accessToken, long accessTokenExpiration) {
+    TokenExpiration tokenExpiration = getTokenExpiration(qTestUrl, apiKey);
+    if (null == tokenExpiration) {
+      tokenExpiration = new TokenExpiration();
+      Map<String, TokenExpiration> token = new HashMap<>();
+      token.put(apiKey, tokenExpiration);
+      QTEST_TOKEN_EXPIRATION_HOLDER.put(qTestUrl, token);
+    }
+    tokenExpiration.setToken(accessToken);
+    tokenExpiration.setValidUntilUTC(accessTokenExpiration);
+
+  }
+
+  public static TokenExpiration getTokenExpiration(String qTestUrl, String apiKey) {
+    Map<String, TokenExpiration> insts = QTEST_TOKEN_EXPIRATION_HOLDER.get(qTestUrl);
+    if (null != insts) {
+      return insts.get(apiKey);
+    }
+    return null;
+  }
   /**
    * Get access token from apiKey
    *
@@ -36,7 +59,7 @@ public class OauthProvider {
     return getAccessToken(url, apiKey, HEADER_KEY);
   }
 
-  public static String getAccessToken(String url, String apiKey, String secretKey) throws OAuthException {
+  private static String getAccessToken(String url, String apiKey, String secretKey) throws OAuthException {
     StringBuilder sb = new StringBuilder()
       .append(url)
       .append("/oauth/token?grant_type=refresh_token")
@@ -58,6 +81,21 @@ public class OauthProvider {
     }
   }
 
+  private static TokenStatus getAccessTokenStatus(String url, String accessToken) throws OAuthException {
+    StringBuilder sb = new StringBuilder()
+        .append(url)
+        .append("/oauth/status");
+    Map<String, String> headers = buildHeaders(accessToken, null);
+    try {
+      ResponseEntity entity = HttpClientUtils.get(sb.toString(), headers);
+      if (HttpStatus.SC_OK != entity.getStatusCode()) {
+        throw new OAuthException(entity.getBody(), entity.getStatusCode());
+      }
+      return JsonUtils.fromJson(entity.getBody(), TokenStatus.class);
+    } catch (Exception e) {
+      throw new OAuthException(e.getMessage(), e);
+    }
+  }
   /**
    * Build header with get access token from refresh token
    *
