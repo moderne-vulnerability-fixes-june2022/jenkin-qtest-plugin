@@ -8,6 +8,8 @@ import com.qasymphony.ci.plugin.utils.HttpClientUtils;
 import com.qasymphony.ci.plugin.utils.JsonUtils;
 import com.qasymphony.ci.plugin.utils.ResponseEntity;
 import org.apache.commons.httpclient.HttpStatus;
+
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.Level;
@@ -56,7 +58,18 @@ public class OauthProvider {
    * @throws OAuthException OAuthException
    */
   public static String getAccessToken(String url, String apiKey) throws OAuthException {
-    return getAccessToken(url, apiKey, HEADER_KEY);
+    TokenExpiration tokenExpiration = getTokenExpiration(url, apiKey);
+    if (null != tokenExpiration) {
+      Instant now = Instant.now();
+      long nowInMillisecond = now.toEpochMilli();
+      if (nowInMillisecond < tokenExpiration.getValidUntilUTC()) {
+        return tokenExpiration.getToken();
+      }
+    }
+    String accessToken = getAccessToken(url, apiKey, HEADER_KEY);
+    TokenStatus accessTokenStatus = getAccessTokenStatus(url, accessToken);
+    putOrUpdateTokenExpiration(url, apiKey, accessToken, accessTokenStatus.getExpiration());
+    return accessToken;
   }
 
   private static String getAccessToken(String url, String apiKey, String secretKey) throws OAuthException {
