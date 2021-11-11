@@ -5,15 +5,18 @@ import com.qasymphony.ci.plugin.exception.StoreResultException;
 import com.qasymphony.ci.plugin.exception.SubmittedException;
 import com.qasymphony.ci.plugin.model.*;
 import com.qasymphony.ci.plugin.model.qtest.Setting;
+import com.qasymphony.ci.plugin.model.qtest.TokenExpiration;
 import com.qasymphony.ci.plugin.parse.CommonParsingUtils;
 import com.qasymphony.ci.plugin.parse.JunitTestResultParser;
 import com.qasymphony.ci.plugin.parse.ParseRequest;
 import com.qasymphony.ci.plugin.parse.ToscaTestResultParser;
 import com.qasymphony.ci.plugin.parse.ToscaJunitTestResultParser;
+import com.qasymphony.ci.plugin.store.StoreResultServiceImpl;
 import com.qasymphony.ci.plugin.submitter.JunitQtestSubmitterImpl;
 import com.qasymphony.ci.plugin.submitter.JunitSubmitter;
 import com.qasymphony.ci.plugin.submitter.JunitSubmitterRequest;
 import com.qasymphony.ci.plugin.submitter.JunitSubmitterResult;
+import com.qasymphony.ci.plugin.utils.ConfigLoaderUtils;
 import com.qasymphony.ci.plugin.utils.HttpClientUtils;
 import com.qasymphony.ci.plugin.utils.JsonUtils;
 import com.qasymphony.ci.plugin.utils.LoggerUtils;
@@ -40,6 +43,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.io.*;
 
 /**
  * @author anpham
@@ -49,6 +53,7 @@ public class PushingResultAction extends Notifier {
   private Configuration configuration;
 
   public PushingResultAction(Configuration configuration) {
+    System.out.println("=== PushingResultAction === " + configuration);
     this.configuration = configuration;
   }
 
@@ -70,7 +75,11 @@ public class PushingResultAction extends Notifier {
   @Override
   public boolean perform(AbstractBuild build, Launcher launcher, BuildListener listener)
     throws InterruptedException, IOException {
+
     PrintStream logger = listener.getLogger();
+    FilePath configFolderPath = new FilePath(build.getParent().getConfigFile().getFile().getParentFile());
+    ConfigLoaderUtils.updateConfig(configFolderPath);
+    // TODO load config from file into memory to check expiration
     JunitSubmitterRequest submitterRequest = configuration.createJunitSubmitRequest();
     if (null == submitterRequest) {
       LoggerUtils.formatError(logger, "Could not create JUnitSumitterRequest");
@@ -447,6 +456,12 @@ public class PushingResultAction extends Notifier {
           configuration.setId(setting.getId());
         }
       }
+      // TODO save token expiration here
+      TokenExpiration tokenExpiration = OauthProvider.getTokenExpiration(configuration.getUrl(), configuration.getAppSecretKey());
+      Jenkins jenkins = Jenkins.get();
+      File rootItemDir = jenkins.getItem(configuration.getJenkinsProjectName()).getRootDir();
+      String json = JsonUtils.toJson(tokenExpiration);
+      ConfigLoaderUtils.saveConfig(new FilePath(rootItemDir), json);
       return new PushingResultAction(configuration);
     }
 
