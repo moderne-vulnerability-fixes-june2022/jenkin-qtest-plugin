@@ -71,15 +71,10 @@ public class PushingResultAction extends Notifier {
     return (DescriptorImpl) super.getDescriptor();
   }
 
-  @SuppressWarnings("rawtypes")
-  @Override
-  public boolean perform(AbstractBuild build, Launcher launcher, BuildListener listener)
+  private boolean performJobAction(AbstractBuild build, Launcher launcher, BuildListener listener)
     throws InterruptedException, IOException {
 
     PrintStream logger = listener.getLogger();
-    FilePath configFolderPath = new FilePath(build.getParent().getConfigFile().getFile().getParentFile());
-    ConfigLoaderUtils.updateConfig(configFolderPath);
-    // TODO load config from file into memory to check expiration
     JunitSubmitterRequest submitterRequest = configuration.createJunitSubmitRequest();
     if (null == submitterRequest) {
       LoggerUtils.formatError(logger, "Could not create JUnitSumitterRequest");
@@ -154,6 +149,17 @@ public class PushingResultAction extends Notifier {
     storeResult(submitterRequest, build, buildResult, junitSubmitter, result, logger);
     LoggerUtils.formatHR(logger);
     return true;
+  }
+
+  @SuppressWarnings("rawtypes")
+  @Override
+  public boolean perform(AbstractBuild build, Launcher launcher, BuildListener listener)
+      throws InterruptedException, IOException {
+    FilePath configFolderPath = new FilePath(build.getParent().getConfigFile().getFile().getParentFile());
+    ConfigLoaderUtils.updateAccessTokenExpirationConfig(configuration.getUrl(), configuration.getAppSecretKey(), configFolderPath);
+    boolean result = performJobAction(build, launcher, listener);
+    saveTokenExpirationConfig();
+    return result;
   }
 
   private List<AutomationTestResult> readExternalTestResults(AbstractBuild build, Launcher launcher, BuildListener listener, PrintStream logger, ExternalTool externalTool) throws Exception{
@@ -389,6 +395,14 @@ public class PushingResultAction extends Notifier {
     LoggerUtils.formatInfo(logger, "");
   }
 
+  private boolean saveTokenExpirationConfig() {
+    TokenExpiration tokenExpiration = OauthProvider.getTokenExpiration(configuration.getUrl(), configuration.getAppSecretKey());
+    Jenkins jenkins = Jenkins.get();
+    File rootItemDir = jenkins.getItem(configuration.getJenkinsProjectName()).getRootDir();
+    String json = JsonUtils.toJson(tokenExpiration);
+    return ConfigLoaderUtils.saveConfig(new FilePath(rootItemDir), json);
+  }
+
   @Extension
   public static final class DescriptorImpl extends BuildStepDescriptor<Publisher> {
 
@@ -485,7 +499,10 @@ public class PushingResultAction extends Notifier {
 
     public FormValidation doCheckAppSecretKey(@QueryParameter String value, @QueryParameter("config.url") final String url, @AncestorInPath AbstractProject project)
             throws IOException, ServletException {
-      return ValidationFormService.checkAppSecretKey(value, url, project);
+      FormValidation formValidation = ValidationFormService.checkAppSecretKey(value, url, project);
+      FilePath configFolderPath = new FilePath(project.getConfigFile().getFile().getParentFile());
+      ConfigLoaderUtils.updateAccessTokenExpirationConfig(url, value, configFolderPath);
+      return formValidation;
     }
 
     public FormValidation doCheckProjectName(@QueryParameter String value)

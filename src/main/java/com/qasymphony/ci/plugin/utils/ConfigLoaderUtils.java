@@ -1,9 +1,13 @@
 package com.qasymphony.ci.plugin.utils;
 
+import com.qasymphony.ci.plugin.OauthProvider;
 import com.qasymphony.ci.plugin.exception.StoreResultException;
+import com.qasymphony.ci.plugin.model.qtest.TokenExpiration;
 import com.qasymphony.ci.plugin.store.StoreResultServiceImpl;
 import hudson.FilePath;
 import hudson.remoting.VirtualChannel;
+import com.qasymphony.ci.plugin.utils.JsonUtils;
+import org.apache.commons.lang.StringUtils;
 import org.jenkinsci.remoting.RoleChecker;
 
 import java.io.*;
@@ -46,10 +50,10 @@ public class ConfigLoaderUtils {
     return true;
   }
 
-  public static boolean updateConfig(FilePath filePath) {
+  public static boolean updateAccessTokenExpirationConfig(String qTestUrl, String apiKey, FilePath filePath) {
     FilePath configFilePath = new FilePath(filePath, TOKEN_CONFIG_FILE);
     try {
-      configFilePath.act(new FilePath.FileCallable<String>() {
+      String jsonString = configFilePath.act(new FilePath.FileCallable<String>() {
         @Override
         public String invoke(File file, VirtualChannel virtualChannel) throws IOException, InterruptedException {
           BufferedReader reader = null;
@@ -72,9 +76,14 @@ public class ConfigLoaderUtils {
         public void checkRoles(RoleChecker roleChecker) throws SecurityException {
         }
       });
+      TokenExpiration tokenExpiration = StringUtils.isEmpty(jsonString) ? null : JsonUtils.fromJson(jsonString, TokenExpiration.class);
+      if (null != tokenExpiration) {
+        OauthProvider.putOrUpdateTokenExpiration(qTestUrl, apiKey, tokenExpiration.getToken(), tokenExpiration.getValidUntilUTC());
+        return true;
+      }
     } catch (Exception ex) {
       return false;
     }
-    return true;
+    return false;
   }
 }
