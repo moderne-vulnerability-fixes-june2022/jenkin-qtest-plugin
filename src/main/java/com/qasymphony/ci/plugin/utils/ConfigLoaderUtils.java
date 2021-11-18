@@ -25,6 +25,7 @@ public class ConfigLoaderUtils {
 
   public static boolean saveConfig(FilePath filePath, String content) {
     FilePath configFilePath = new FilePath(filePath, TOKEN_CONFIG_FILE);
+    String encodedContent = PluginUtils.encode(content);
     try {
       configFilePath.act(new FilePath.FileCallable<String>() {
         @Override public String invoke(File file, VirtualChannel virtualChannel)
@@ -32,7 +33,7 @@ public class ConfigLoaderUtils {
           BufferedWriter writer = null;
           try {
             writer = new BufferedWriter(new FileWriter(file.getPath(), false));
-            writer.write(content);
+            writer.write(encodedContent);
             writer.newLine();
             return null;
           } finally {
@@ -69,7 +70,8 @@ public class ConfigLoaderUtils {
             if (null != reader)
               reader.close();
           }
-          return content.toString();
+          String encoded = content.toString();
+          return StringUtils.isEmpty(encoded) ? null : PluginUtils.decode(encoded);
         }
 
         @Override

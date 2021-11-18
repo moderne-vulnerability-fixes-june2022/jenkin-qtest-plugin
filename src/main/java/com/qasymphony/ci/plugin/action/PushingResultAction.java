@@ -53,7 +53,6 @@ public class PushingResultAction extends Notifier {
   private Configuration configuration;
 
   public PushingResultAction(Configuration configuration) {
-    System.out.println("=== PushingResultAction === " + configuration);
     this.configuration = configuration;
   }
 
@@ -470,7 +469,6 @@ public class PushingResultAction extends Notifier {
           configuration.setId(setting.getId());
         }
       }
-      // TODO save token expiration here
       TokenExpiration tokenExpiration = OauthProvider.getTokenExpiration(configuration.getUrl(), configuration.getAppSecretKey());
       Jenkins jenkins = Jenkins.get();
       File rootItemDir = jenkins.getItem(configuration.getJenkinsProjectName()).getRootDir();
@@ -499,10 +497,9 @@ public class PushingResultAction extends Notifier {
 
     public FormValidation doCheckAppSecretKey(@QueryParameter String value, @QueryParameter("config.url") final String url, @AncestorInPath AbstractProject project)
             throws IOException, ServletException {
-      FormValidation formValidation = ValidationFormService.checkAppSecretKey(value, url, project);
       FilePath configFolderPath = new FilePath(project.getConfigFile().getFile().getParentFile());
       ConfigLoaderUtils.updateAccessTokenExpirationConfig(url, value, configFolderPath);
-      return formValidation;
+      return ValidationFormService.checkAppSecretKey(value, url, project);
     }
 
     public FormValidation doCheckProjectName(@QueryParameter String value)

@@ -7,6 +7,7 @@ import com.qasymphony.ci.plugin.exception.StoreResultException;
 import com.qasymphony.ci.plugin.exception.SubmittedException;
 import com.qasymphony.ci.plugin.model.*;
 import com.qasymphony.ci.plugin.model.qtest.Setting;
+import com.qasymphony.ci.plugin.model.qtest.TokenExpiration;
 import com.qasymphony.ci.plugin.parse.CommonParsingUtils;
 import com.qasymphony.ci.plugin.parse.JunitTestResultParser;
 import com.qasymphony.ci.plugin.parse.ParseRequest;
@@ -17,6 +18,7 @@ import com.qasymphony.ci.plugin.submitter.JunitQtestSubmitterImpl;
 import com.qasymphony.ci.plugin.submitter.JunitSubmitter;
 import com.qasymphony.ci.plugin.submitter.JunitSubmitterRequest;
 import com.qasymphony.ci.plugin.submitter.JunitSubmitterResult;
+import com.qasymphony.ci.plugin.utils.ConfigLoaderUtils;
 import com.qasymphony.ci.plugin.utils.HttpClientUtils;
 import com.qasymphony.ci.plugin.utils.JsonUtils;
 import com.qasymphony.ci.plugin.utils.LoggerUtils;
@@ -39,6 +41,8 @@ import org.kohsuke.stapler.bind.JavaScriptMethod;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
 import javax.servlet.ServletException;
+import java.io.File;
+import hudson.FilePath;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.*;
@@ -261,6 +265,24 @@ public class SubmitJUnitStep extends Step {
             this.ws = getContext().get(FilePath.class);
             this.listener = getContext().get(TaskListener.class);
             this.launcher = getContext().get(Launcher.class);
+            PipelineConfiguration pipelineConfiguration = this.step.getPipeConfiguration();
+            String qTestUrl = pipelineConfiguration.getQtestURL();
+            String apiKey = pipelineConfiguration.getApiKey();
+            FilePath configFolderPath = new FilePath(build.getParent().getConfigFile().getFile().getParentFile());
+            ConfigLoaderUtils.updateAccessTokenExpirationConfig(qTestUrl, apiKey, configFolderPath);
+            try {
+                return runStep();
+            } finally {
+                // save config to file
+                TokenExpiration tokenExpiration = OauthProvider.getTokenExpiration(qTestUrl, apiKey);
+                Jenkins jenkins = Jenkins.get();
+                File rootItemDir = jenkins.getItem(ws.getName()).getRootDir();
+                String json = JsonUtils.toJson(tokenExpiration);
+                ConfigLoaderUtils.saveConfig(new FilePath(rootItemDir), json);
+            }
+        }
+
+        private Void runStep() throws Exception {
             PrintStream logger = listener.getLogger();
             JenkinsLocationConfiguration globalConfig = new JenkinsLocationConfiguration();
             String url = globalConfig.getUrl();
